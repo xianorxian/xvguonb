@@ -4,6 +4,77 @@ import cv2
 import numpy as np
 
 
+def correct_text_skew(binary_image):
+    """
+    文本倾斜矫正函数。
+
+    功能：
+    1. 根据二值化后的文字区域检测文本倾斜角度
+    2. 对图片进行旋转矫正
+    3. 返回矫正后的图片和倾斜角度
+
+    参数：
+        binary_image: 二值化后的图片，要求是灰度图
+
+    返回：
+        corrected_image: 倾斜矫正后的图片
+        angle: 检测到的倾斜角度
+    """
+
+    # 反色：让文字变成白色，背景变成黑色
+    # 这样方便 OpenCV 找到文字区域
+    inverted = cv2.bitwise_not(binary_image)
+
+    # 找出所有文字像素点的位置
+    coords = np.column_stack(np.where(inverted > 0))
+
+    # 如果没有检测到文字区域，就不做矫正
+    if coords.size == 0:
+        print("未检测到明显文字区域，跳过倾斜矫正")
+        return binary_image, 0
+
+    # 使用最小外接矩形估计文本倾斜角度
+    angle = cv2.minAreaRect(coords)[-1]
+
+    # 角度修正
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+
+    # 如果倾斜角度非常小，就不旋转，避免影响图片质量
+    if abs(angle) < 0.3:
+        print("文本倾斜角度很小，不需要矫正")
+        return binary_image, angle
+
+    # 获取图片尺寸
+    height, width = binary_image.shape[:2]
+    center = (width // 2, height // 2)
+
+    # 生成旋转矩阵
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    # 旋转图片
+    corrected_image = cv2.warpAffine(
+        binary_image,
+        rotation_matrix,
+        (width, height),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=255
+    )
+
+    # 旋转后再次二值化，保证图片仍然是黑白图
+    _, corrected_image = cv2.threshold(
+        corrected_image,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+
+    return corrected_image, angle
+
+
 def import_and_preprocess_image(input_path, output_folder="processed_images", max_width=1600):
     """
     图片导入与预处理总函数。
@@ -18,8 +89,10 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     7. 转换为灰度图
     8. 轻微去噪
     9. 增强对比度
-    10. 将处理后的图片保存到新建文件夹中
-    11. 返回处理后的图片路径
+    10. 自适应二值化
+    11. 文本倾斜矫正
+    12. 将处理后的图片保存到新建文件夹中
+    13. 返回处理后的图片路径
 
     参数：
         input_path: 原始图片路径
@@ -91,14 +164,30 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     # 增强对比度
     enhanced = cv2.equalizeHist(denoised)
 
+    # 自适应二值化
+    binary = cv2.adaptiveThreshold(
+        enhanced,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        11
+    )
+
+    # 文本倾斜矫正
+    corrected, angle = correct_text_skew(binary)
+
+    print(f"检测到文本倾斜角度：{angle:.2f}°")
+    print("文本倾斜矫正完成")
+
     # 生成处理后图片文件名
     file_name = f"preprocessed_{int(time.time())}.png"
 
-    # 拼接保存路径：processed_images/preprocessed_xxx.png
+    # 拼接保存路径
     processed_image_path = os.path.join(output_folder, file_name)
 
-    # 保存图片，兼容中文路径
-    success, encoded_image = cv2.imencode(".png", enhanced)
+    # 保存矫正后的图片，兼容中文路径
+    success, encoded_image = cv2.imencode(".png", corrected)
 
     if not success:
         raise ValueError("处理后的图片保存失败")
@@ -109,6 +198,7 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     processed_image_path = os.path.abspath(processed_image_path)
 
     print("图片预处理完成")
+    print("已完成：灰度化、去噪、增强对比度、自适应二值化、文本倾斜矫正")
     print(f"处理后的图片已保存到：{processed_image_path}")
 
     return processed_image_path
