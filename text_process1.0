@@ -1,0 +1,23 @@
+from image_process import get_image_info, preprocess_image
+
+
+source = input("请输入图片路径或图片链接：")
+
+try:
+    info = get_image_info(source)
+
+    print("图片读取成功")
+    print("图片信息如下：")
+    print(f"路径：{info['path']}")
+    print(f"宽度：{info['width']}")
+    print(f"高度：{info['height']}")
+    print(f"通道数：{info['channels']}")
+
+    processed_path = preprocess_image(source)
+
+    print("图片预处理完成")
+    print(f"处理后的图片路径：{processed_path}")
+
+except Exception as e:
+    print("图片处理失败")
+    print(f"错误原因：{e}")
