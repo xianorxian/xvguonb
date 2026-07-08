@@ -1,6 +1,12 @@
 import sys
 import tkinter as tk
+import os
+import shutil
+import time
 from tkinter import ttk
+from tkinter import filedialog, messagebox
+from PIL import Image, ImageTk
+from image_processing import import_and_preprocess_image
 
 class OCRApp:
 
@@ -25,28 +31,83 @@ class OCRApp:
 
 
 
-        # 四个功能按钮
-        self.image_upload = tk.Button(self.window,width=20,height=2,text='上传图片',font=('Arial',10,'bold'))
+        # 5个功能按钮
+        self.image_upload = tk.Button(self.window,width=20,height=2,text='上传图片',font=('Arial',10,'bold'),command=self.upload_image)
         self.image_upload.grid(row=2,column=0,padx=10,pady=(50,30))
-        self.begain_identify = tk.Button(self.window,width=20,height=2,text='开始识别',font=('Arial',10,'bold'))
+
+        self.begain_identify = tk.Button(self.window, width=20, height=2, text='开始识别', font=('Arial',10,'bold'), command=self.beginiden)
         self.begain_identify.grid(row=3,column=0,padx=10,pady=(30,30))
+
         self.message_copy = tk.Button(self.window,width=20,height=2,text='复制文本',font=('Arial',10,'bold'))
         self.message_copy.grid(row=4,column=0,padx=10,pady=(30,30))
+
         self.record = tk.Button(self.window,width=20,height=2,text='历史记录',font=('Arial',10,'bold'))
         self.record.grid(row=5,column=0,padx=10,pady=(30,30))
+
         self.text_clear = tk.Button(self.window,width=20,height=2,text='清除文字',font=('Arial',10,'bold'),command =self.clear_text)
         self.text_clear .grid(row=6,column=0,padx=10,pady=(30,30))
 
         # 图片位置先用lable占位
-        self.image = tk.Label(self.window,bg='grey',width=100,height=10,text= '文字显示区')
-        self.image.grid(row=0,column=1,rowspan=2,padx=(50,10),pady=40)
+        self.image = tk.Label(self.window,bg='grey',text= '文字显示区',width=20,height=1,font=('Arial',20,'bold'))
+        self.image.grid(row=0,column=1,rowspan=2,padx=(50,10),pady=40,sticky='nsew')
 
         # 文本显示区
-        self.text = tk.Text(self.window,bg='white',width=80,height=20,font='Arial')
+        self.text = tk.Text(self.window,bg='white',font='Arial')
         self.text.grid(row=2,column=1,rowspan=5,padx=(50,10),pady=10,sticky='ns')
 
-    def clear_text(self):
+
+    def clear_text(self):    # 清除文字代码
         self.text.delete('1.0', 'end')
+
+    def upload_image(self):
+        """上传图片并自动保存到指定文件夹"""
+        # 1. 让用户选择电脑里的图片
+        file_path = filedialog.askopenfilename(
+            title="选择图片",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.bmp *.webp")]
+        )
+
+        if file_path:
+            try:
+                # 2. 定义你想保存图片的本地文件夹名称（比如叫 'saved_images'）
+                save_folder = "saved_images"
+
+                # 如果这个文件夹不存在，代码会自动创建它
+                if not os.path.exists(save_folder):
+                    os.makedirs(save_folder)
+
+                # 3. 提取原图片的文件后缀名（例如 .jpg 或 .png）
+                file_extension = os.path.splitext(file_path)[1]
+
+                # 4. 生成一个新的文件名，防止重复（使用当前时间，如 20260708_153022.jpg）
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                new_file_name = f"ocr_{timestamp}{file_extension}"
+
+                # 5. 拼接出最终在本地保存的完整路径
+                local_save_path = os.path.join(save_folder, new_file_name)
+
+                # 6. 【核心命令】将用户选择的图片复制到该文件夹下
+                shutil.copy(file_path, local_save_path)
+
+                # 7. 将更新后的本地图片路径记录到类变量中，方便接下来的“开始识别”按钮读取
+                self.current_image_path = local_save_path
+
+                # --- 以下是界面显示逻辑（保持不变） ---
+                # 使用 PIL 打开并缩放图片以适应你的 Label
+                img = Image.open(local_save_path)
+                img.thumbnail((600, 250))
+                self.tk_image = ImageTk.PhotoImage(img)
+
+                # 更新界面上的 Label
+                self.image.config(image=self.tk_image, text="")
+
+                # 弹窗提示或在控制台打印成功信息
+                print(f"图片已成功保存至本地: {local_save_path}")
+
+            except Exception as e:
+                messagebox.showerror("错误", f"保存或加载图片失败: {e}")
+    def beginiden(self):
+        self.current_processed_addsss = import_and_preprocess_image(self.current_image_path)
 
 
 if __name__ == "__main__":
