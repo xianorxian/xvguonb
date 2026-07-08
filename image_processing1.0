@@ -1,0 +1,130 @@
+import os
+import time
+import cv2
+import numpy as np
+
+
+SUPPORTED_IMAGE_TYPES = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
+
+
+def is_supported_image(file_path):
+    """
+    判断图片格式是否支持
+    """
+    return file_path.lower().endswith(SUPPORTED_IMAGE_TYPES)
+
+
+def read_image(file_path):
+    """
+    读取本地图片，兼容中文路径
+    """
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("图片文件不存在，请检查路径是否正确")
+
+    if not is_supported_image(file_path):
+        raise ValueError("图片格式不支持，请选择 jpg、jpeg、png、bmp 或 webp 图片")
+
+    image_data = np.fromfile(file_path, dtype=np.uint8)
+    image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+
+    if image is None:
+        raise ValueError("图片读取失败，可能是图片损坏或格式异常")
+
+    return image
+
+
+def resize_image(image, max_width=1600):
+    """
+    调整图片大小
+    """
+
+    height, width = image.shape[:2]
+
+    if width <= max_width:
+        return image
+
+    scale = max_width / width
+    new_width = max_width
+    new_height = int(height * scale)
+
+    resized_image = cv2.resize(
+        image,
+        (new_width, new_height),
+        interpolation=cv2.INTER_AREA
+    )
+
+    return resized_image
+
+
+def save_image(file_path, image):
+    """
+    保存图片，兼容中文路径
+    """
+
+    ext = os.path.splitext(file_path)[1]
+
+    if ext == "":
+        ext = ".png"
+        file_path += ext
+
+    success, encoded_image = cv2.imencode(ext, image)
+
+    if not success:
+        raise ValueError("图片保存失败")
+
+    encoded_image.tofile(file_path)
+
+
+def preprocess_image(input_path, output_dir="temp"):
+    """
+    图片预处理主函数
+
+    输入：
+        input_path：原始图片路径
+
+    输出：
+        output_path：处理后的图片路径
+    """
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    image = read_image(input_path)
+
+    image = resize_image(image)
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    denoised = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    enhanced = cv2.equalizeHist(denoised)
+
+    filename = f"preprocessed_{int(time.time())}.png"
+    output_path = os.path.join(output_dir, filename)
+
+    save_image(output_path, enhanced)
+
+    return output_path
+
+
+def get_image_info(file_path):
+    """
+    获取图片信息
+    """
+
+    image = read_image(file_path)
+
+    height, width = image.shape[:2]
+
+    if len(image.shape) == 3:
+        channels = image.shape[2]
+    else:
+        channels = 1
+
+    return {
+        "path": file_path,
+        "width": width,
+        "height": height,
+        "channels": channels
+    }
