@@ -1,0 +1,7 @@
+from image_process import import_and_preprocess_image
+
+image_path = "images/test.png"
+
+processed_path = import_and_preprocess_image(image_path)
+
+print(processed_path)
