@@ -1,0 +1,55 @@
+import sys
+import tkinter as tk
+from tkinter import ttk
+
+class OCRApp:
+
+
+
+    def __init__(self,window):
+        self.window = window
+        self.window.title("OCR图片文字识别系统")
+        self.window.geometry("1200x800")
+
+
+        # 1. 界面整体样式配置 (使用 ttk 现代风格)
+        self.style = ttk.Style()
+        self.style.theme_use("clam")  # 使用一个干净现代的界面主题
+
+
+        # 左上角标题设置
+        self.name1 = tk.Label(self.window,width=5,height=1,text='OCR',font=('Arial',40,'bold'))
+        self.name1.grid(row=0,column=0,padx=40,pady=(40,5))
+        self.name2 = tk.Label(self.window,width=10,height=1,text='文字识别系统',font=('Arial',30))
+        self.name2.grid(row=1,column=0,padx=10,pady=2)
+
+
+
+        # 四个功能按钮
+        self.image_upload = tk.Button(self.window,width=20,height=2,text='上传图片',font=('Arial',10,'bold'))
+        self.image_upload.grid(row=2,column=0,padx=10,pady=(50,30))
+        self.begain_identify = tk.Button(self.window,width=20,height=2,text='开始识别',font=('Arial',10,'bold'))
+        self.begain_identify.grid(row=3,column=0,padx=10,pady=(30,30))
+        self.message_copy = tk.Button(self.window,width=20,height=2,text='复制文本',font=('Arial',10,'bold'))
+        self.message_copy.grid(row=4,column=0,padx=10,pady=(30,30))
+        self.record = tk.Button(self.window,width=20,height=2,text='历史记录',font=('Arial',10,'bold'))
+        self.record.grid(row=5,column=0,padx=10,pady=(30,30))
+        self.text_clear = tk.Button(self.window,width=20,height=2,text='清除文字',font=('Arial',10,'bold'),command =self.clear_text)
+        self.text_clear .grid(row=6,column=0,padx=10,pady=(30,30))
+
+        # 图片位置先用lable占位
+        self.image = tk.Label(self.window,bg='grey',width=100,height=10,text= '文字显示区')
+        self.image.grid(row=0,column=1,rowspan=2,padx=(50,10),pady=40)
+
+        # 文本显示区
+        self.text = tk.Text(self.window,bg='white',width=80,height=20,font='Arial')
+        self.text.grid(row=2,column=1,rowspan=5,padx=(50,10),pady=10,sticky='ns')
+
+    def clear_text(self):
+        self.text.delete('1.0', 'end')
+
+
+if __name__ == "__main__":
+    ocr_window = tk.Tk()
+    app = OCRApp(ocr_window)
+    ocr_window.mainloop()
