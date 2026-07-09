@@ -4,142 +4,36 @@ import cv2
 import numpy as np
 
 
-def correct_text_skew(binary_image):
+def read_image_with_chinese_path(input_path):
     """
-    文本倾斜矫正函数。
-
-    功能：
-    1. 根据二值化后的文字区域检测文本倾斜角度
-    2. 对图片进行旋转矫正
-    3. 返回矫正后的图片和倾斜角度
-
-    参数：
-        binary_image: 二值化后的图片，要求是灰度图
-
-    返回：
-        corrected_image: 倾斜矫正后的图片
-        angle: 检测到的倾斜角度
+    读取图片，兼容中文路径。
     """
-
-    # 反色：让文字变成白色，背景变成黑色
-    # 这样方便 OpenCV 找到文字区域
-    inverted = cv2.bitwise_not(binary_image)
-
-    # 找出所有文字像素点的位置
-    coords = np.column_stack(np.where(inverted > 0))
-
-    # 如果没有检测到文字区域，就不做矫正
-    if coords.size == 0:
-        print("未检测到明显文字区域，跳过倾斜矫正")
-        return binary_image, 0
-
-    # 使用最小外接矩形估计文本倾斜角度
-    angle = cv2.minAreaRect(coords)[-1]
-
-    # 角度修正
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
-
-    # 如果倾斜角度非常小，就不旋转，避免影响图片质量
-    if abs(angle) < 0.3:
-        print("文本倾斜角度很小，不需要矫正")
-        return binary_image, angle
-
-    # 获取图片尺寸
-    height, width = binary_image.shape[:2]
-    center = (width // 2, height // 2)
-
-    # 生成旋转矩阵
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-
-    # 旋转图片
-    corrected_image = cv2.warpAffine(
-        binary_image,
-        rotation_matrix,
-        (width, height),
-        flags=cv2.INTER_CUBIC,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=255
-    )
-
-    # 旋转后再次二值化，保证图片仍然是黑白图
-    _, corrected_image = cv2.threshold(
-        corrected_image,
-        0,
-        255,
-        cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
-
-    return corrected_image, angle
-
-
-def import_and_preprocess_image(input_path, output_folder="processed_images", max_width=1600):
-    """
-    图片导入与预处理总函数。
-
-    功能：
-    1. 检查图片路径是否存在
-    2. 检查图片格式是否支持
-    3. 自动新建保存处理后图片的文件夹
-    4. 读取图片，兼容中文路径
-    5. 获取图片基本信息
-    6. 调整图片大小
-    7. 转换为灰度图
-    8. 轻微去噪
-    9. 增强对比度
-    10. 自适应二值化
-    11. 文本倾斜矫正
-    12. 将处理后的图片保存到新建文件夹中
-    13. 返回处理后的图片路径
-
-    参数：
-        input_path: 原始图片路径
-        output_folder: 处理后图片保存文件夹，默认 processed_images
-        max_width: 图片最大宽度，默认 1600
-
-    返回：
-        processed_image_path: 处理后的图片路径
-    """
-
-    # 支持的图片格式
-    supported_types = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
-
-    # 检查图片路径是否存在
-    if not os.path.exists(input_path):
-        raise FileNotFoundError("图片文件不存在，请检查路径是否正确")
-
-    # 检查图片格式是否支持
-    if not input_path.lower().endswith(supported_types):
-        raise ValueError("图片格式不支持，请选择 jpg、jpeg、png、bmp 或 webp 图片")
-
-    # 自动新建保存处理后图片的文件夹
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    # 读取图片，兼容中文路径
     image_data = np.fromfile(input_path, dtype=np.uint8)
     image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+    return image
 
-    if image is None:
-        raise ValueError("图片读取失败，可能是图片损坏或格式异常")
 
-    # 获取图片基本信息
+def save_image_with_chinese_path(save_path, image):
+    """
+    保存图片，兼容中文路径。
+    """
+    success, encoded_image = cv2.imencode(".png", image)
+
+    if not success:
+        raise ValueError("处理后的图片保存失败")
+
+    encoded_image.tofile(save_path)
+
+
+def resize_image(image, max_width=1600, min_width=900):
+    """
+    自适应缩放图片。
+
+    太大的图片缩小，避免处理速度慢；
+    太小的图片适当放大，方便 OCR 识别小字。
+    """
     height, width = image.shape[:2]
 
-    if len(image.shape) == 3:
-        channels = image.shape[2]
-    else:
-        channels = 1
-
-    print("图片读取成功")
-    print(f"原始图片路径：{input_path}")
-    print(f"图片宽度：{width}")
-    print(f"图片高度：{height}")
-    print(f"图片通道数：{channels}")
-
-    # 如果图片太大，就按比例缩小
     if width > max_width:
         scale = max_width / width
         new_width = max_width
@@ -151,54 +45,242 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
             interpolation=cv2.INTER_AREA
         )
 
-        print(f"图片已缩放为：{new_width} × {new_height}")
+        print(f"图片过大，已缩小为：{new_width} × {new_height}")
+
+    elif width < min_width:
+        scale = min_width / width
+        new_width = min_width
+        new_height = int(height * scale)
+
+        image = cv2.resize(
+            image,
+            (new_width, new_height),
+            interpolation=cv2.INTER_CUBIC
+        )
+
+        print(f"图片较小，已放大为：{new_width} × {new_height}")
+
     else:
-        print("图片尺寸未超过限制，不需要缩放")
+        print("图片尺寸合适，不需要缩放")
+
+    return image
+
+
+def auto_contrast(gray_image):
+    """
+    自动对比度拉伸。
+
+    作用：
+    让文字和背景的差异更明显，
+    但不会像二值化那样把复杂图片变成线稿。
+    """
+    low, high = np.percentile(gray_image, (2, 98))
+
+    if high - low < 10:
+        return gray_image
+
+    result = np.clip((gray_image - low) * 255.0 / (high - low), 0, 255)
+    return result.astype(np.uint8)
+
+
+def safe_skew_correction(gray_image):
+    """
+    安全的文本倾斜矫正。
+
+    注意：
+    只在检测到比较可靠的小角度倾斜时才旋转。
+    如果图片内容复杂，或者角度不可信，就自动跳过。
+    """
+
+    # 使用 OTSU 临时二值化，仅用于检测角度，不作为最终输出
+    _, binary = cv2.threshold(
+        gray_image,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+
+    # 边缘检测
+    edges = cv2.Canny(binary, 50, 150, apertureSize=3)
+
+    # 检测直线
+    lines = cv2.HoughLinesP(
+        edges,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=120,
+        minLineLength=gray_image.shape[1] // 5,
+        maxLineGap=20
+    )
+
+    if lines is None:
+        print("未检测到可靠文本方向，跳过倾斜矫正")
+        return gray_image, 0
+
+    angles = []
+
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+
+        if x2 == x1:
+            continue
+
+        angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+
+        # 只保留接近水平的角度
+        if -10 <= angle <= 10:
+            angles.append(angle)
+
+    if len(angles) < 3:
+        print("可靠水平线数量不足，跳过倾斜矫正")
+        return gray_image, 0
+
+    median_angle = np.median(angles)
+
+    # 角度太小，不需要处理
+    if abs(median_angle) < 0.3:
+        print("图片倾斜角度很小，不需要矫正")
+        return gray_image, median_angle
+
+    # 角度太大，可能是复杂图片误判
+    if abs(median_angle) > 5:
+        print("检测到的倾斜角度较大，可能误判，跳过倾斜矫正")
+        return gray_image, median_angle
+
+    height, width = gray_image.shape[:2]
+    center = (width // 2, height // 2)
+
+    rotation_matrix = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+
+    corrected = cv2.warpAffine(
+        gray_image,
+        rotation_matrix,
+        (width, height),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REPLICATE
+    )
+
+    print(f"已进行倾斜矫正，角度：{median_angle:.2f}°")
+
+    return corrected, median_angle
+
+
+def import_and_preprocess_image(input_path, output_folder="processed_images", max_width=1600):
+    """
+    图片导入与预处理总函数。
+
+    统一适用于：
+    1. 普通文字图片
+    2. 表格截图
+    3. 软件界面截图
+    4. 游戏界面截图
+    5. 拍照图片
+
+    不需要手动区分图片类型。
+
+    处理流程：
+    1. 检查图片路径是否存在
+    2. 检查图片格式是否支持
+    3. 自动创建输出文件夹
+    4. 读取图片，兼容中文路径
+    5. 自适应缩放
+    6. 灰度化
+    7. 温和去噪
+    8. 自动对比度增强
+    9. CLAHE 局部增强
+    10. 轻微锐化
+    11. 安全倾斜矫正
+    12. 保存处理后图片
+    13. 返回处理后图片路径
+
+    参数：
+        input_path: 原始图片路径
+        output_folder: 处理后图片保存文件夹
+        max_width: 图片最大宽度
+
+    返回：
+        processed_image_path: 处理后的图片路径
+    """
+
+    supported_types = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
+
+    if not os.path.exists(input_path):
+        raise FileNotFoundError("图片文件不存在，请检查路径是否正确")
+
+    if not input_path.lower().endswith(supported_types):
+        raise ValueError("图片格式不支持，请选择 jpg、jpeg、png、bmp 或 webp 图片")
+
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    image = read_image_with_chinese_path(input_path)
+
+    if image is None:
+        raise ValueError("图片读取失败，可能是图片损坏或格式异常")
+
+    height, width = image.shape[:2]
+    channels = image.shape[2] if len(image.shape) == 3 else 1
+
+    print("图片读取成功")
+    print(f"原始图片路径：{input_path}")
+    print(f"图片宽度：{width}")
+    print(f"图片高度：{height}")
+    print(f"图片通道数：{channels}")
+
+    # 自适应缩放
+    image = resize_image(image, max_width=max_width)
 
     # 转换为灰度图
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # 轻微去噪
-    denoised = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    # 增强对比度
-    enhanced = cv2.equalizeHist(denoised)
-
-    # 自适应二值化
-    binary = cv2.adaptiveThreshold(
-        enhanced,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        31,
-        11
+    # 温和去噪：保留文字边缘
+    denoised = cv2.bilateralFilter(
+        gray,
+        d=5,
+        sigmaColor=40,
+        sigmaSpace=40
     )
 
-    # 文本倾斜矫正
-    corrected, angle = correct_text_skew(binary)
+    # 自动对比度增强
+    contrasted = auto_contrast(denoised)
 
-    print(f"检测到文本倾斜角度：{angle:.2f}°")
-    print("文本倾斜矫正完成")
+    # CLAHE 局部增强
+    clahe = cv2.createCLAHE(
+        clipLimit=2.0,
+        tileGridSize=(8, 8)
+    )
+    enhanced = clahe.apply(contrasted)
 
-    # 生成处理后图片文件名
+    # 轻微锐化
+    blurred = cv2.GaussianBlur(enhanced, (0, 0), 1)
+
+    sharpened = cv2.addWeighted(
+        enhanced,
+        1.35,
+        blurred,
+        -0.35,
+        0
+    )
+
+    # 安全倾斜矫正
+    corrected, angle = safe_skew_correction(sharpened)
+
+    # 为了兼容部分 OCR 模块，转回三通道保存
+    result_image = cv2.cvtColor(corrected, cv2.COLOR_GRAY2BGR)
+
+    # 生成文件名
     file_name = f"preprocessed_{int(time.time())}.png"
 
-    # 拼接保存路径
     processed_image_path = os.path.join(output_folder, file_name)
 
-    # 保存矫正后的图片，兼容中文路径
-    success, encoded_image = cv2.imencode(".png", corrected)
+    # 保存处理后的图片
+    save_image_with_chinese_path(processed_image_path, result_image)
 
-    if not success:
-        raise ValueError("处理后的图片保存失败")
-
-    encoded_image.tofile(processed_image_path)
-
-    # 转成绝对路径，方便其他模块调用
     processed_image_path = os.path.abspath(processed_image_path)
 
     print("图片预处理完成")
-    print("已完成：灰度化、去噪、增强对比度、自适应二值化、文本倾斜矫正")
+    print("已完成：缩放、灰度化、温和去噪、自动增强、局部增强、轻微锐化、安全倾斜矫正")
+    print(f"最终倾斜角度：{angle:.2f}°")
     print(f"处理后的图片已保存到：{processed_image_path}")
 
     return processed_image_path
