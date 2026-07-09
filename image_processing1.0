@@ -111,33 +111,23 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     功能：
     1. 检查图片路径是否存在
     2. 检查图片格式是否支持
-    3. 自动新建保存处理后图片的文件夹
+    3. 自动新建保存文件夹
     4. 读取图片，兼容中文路径
-    5. 获取图片基本信息
-    6. 调整图片大小
-    7. 转换为灰度图
-    8. 轻微去噪
-    9. 增强对比度
-    10. 将处理后的图片保存到新建文件夹中
+    5. 调整图片大小
+    6. 灰度化
+    7. 去噪
+    8. 背景光照校正
+    9. 局部对比度增强
+    10. 保存处理后的图片
     11. 返回处理后的图片路径
-
-    参数：
-        input_path: 原始图片路径
-        output_folder: 处理后图片保存文件夹，默认 processed_images
-        max_width: 图片最大宽度，默认 1600
-
-    返回：
-        processed_image_path: 处理后的图片路径
     """
 
-    # 1. 自动新建保存文件夹
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # 2. 读取图片
+    # 1. 读取图片
     image = read_image(input_path)
 
-    # 3. 获取原始图片信息
     height, width = image.shape[:2]
 
     if len(image.shape) == 3:
@@ -151,7 +141,7 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     print(f"图片高度：{height}")
     print(f"图片通道数：{channels}")
 
-    # 4. 调整图片大小
+    # 2. 缩放图片
     image = resize_image(image, max_width=max_width)
 
     new_height, new_width = image.shape[:2]
@@ -161,41 +151,41 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     else:
         print("图片尺寸未超过限制，不需要缩放")
 
-    # 5. 转换为灰度图
+    # 3. 转换为灰度图
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # 6. 轻微去噪
-    denoised = cv2.GaussianBlur(gray, (3, 3), 0)
+    # 4. 轻微去噪
+    # 注意：这里不要太强，否则会把手写字边缘糊掉
+    denoised = cv2.bilateralFilter(gray, 5, 50, 50)
 
-    # 7. 增强对比度
-    enhanced = cv2.equalizeHist(denoised)
+    # 5. 背景光照校正
+    # 用大范围模糊估计背景，再消除纸张阴影和纹理
+    background = cv2.GaussianBlur(denoised, (31, 31), 0)
 
-    # 8. 生成处理后图片文件名
+    corrected = cv2.divide(denoised, background, scale=255)
+
+    # 6. 局部对比度增强
+    # 比 equalizeHist 温和，不会疯狂放大整张图的噪声
+    clahe = cv2.createCLAHE(
+        clipLimit=1.5,
+        tileGridSize=(8, 8)
+    )
+
+    enhanced = clahe.apply(corrected)
+
+    # 7. 再轻微平滑一下，减少纸张颗粒
+    final_image = cv2.GaussianBlur(enhanced, (3, 3), 0)
+
+    # 8. 生成保存路径
     file_name = f"preprocessed_{int(time.time())}.png"
-
-    # 9. 拼接保存路径
     processed_image_path = os.path.join(output_folder, file_name)
 
-    # 10. 保存处理后的图片
-    save_image(processed_image_path, enhanced)
+    # 9. 保存图片
+    save_image(processed_image_path, final_image)
 
-    # 11. 转换为绝对路径，方便 OCR 模块调用
     processed_image_path = os.path.abspath(processed_image_path)
 
     print("图片预处理完成")
     print(f"处理后的图片已保存到：{processed_image_path}")
 
     return processed_image_path
-
-
-def preprocess_image(input_path, output_dir="processed_images"):
-    """
-    为了兼容旧代码，保留一个 preprocess_image 函数
-
-    实际上它调用的是 import_and_preprocess_image
-    """
-
-    return import_and_preprocess_image(
-        input_path=input_path,
-        output_folder=output_dir
-    )
