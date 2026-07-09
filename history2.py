@@ -1,8 +1,8 @@
 import time,json,os
 
 class history_node:
-    def __init__(self,timepoint,image_path,text,text_len):
-        self.time_point = timepoint
+    def __init__(self,time_point,image_path,text,text_len):
+        self.time_point = time_point
         self.image_path = image_path
         self.text = text
         self.text_len = text_len
@@ -15,7 +15,7 @@ class history_bst:
         self.load_from_file()
 
     def my_insert(self,node,new_node):
-        if new_node.timepoint < node.timepoint:
+        if new_node.time_point < node.time_point:
             if node.left == None :
                 node.left = new_node
             else:
@@ -40,7 +40,7 @@ class history_bst:
             return
         self.inorder(node.left,res_list)
         res_list.append({
-            "timepoint":node.timepoint,
+            "time_point":node.time_point,
             "image_path":node.image_path,
             "text":node.text,
             "text_len":node.text_len
@@ -55,16 +55,16 @@ class history_bst:
     def search(self,node,start,end,res_list):
         if node == None:
             return
-        if start <= node.timepoint <= end:
+        if start <= node.time_point <= end:
             res_list.append({
-                "timepoint": node.timepoint,
+                "time_point": node.time_point,
                 "image_path": node.image_path,
                 "text":node.text,
                 "text_len":node.text_len
             })
             self.search(node.left,start,end,res_list)
             self.search(node.right,start,end,res_list)
-        elif node.timepoint > end:
+        elif node.time_point > end:
             self.search(node.left,start,end,res_list)
         else:
             self.search(node.right,start,end,res_list)
@@ -81,7 +81,7 @@ class history_bst:
         lower_key = keyword.lower()
         if lower_key in lower_text:
             res_list.append({
-                "timepoint": node.timepoint,
+                "time_point": node.time_point,
                 "image_path": node.image_path,
                 "text": node.text,
                 "text_len": node.text_len
@@ -107,7 +107,7 @@ class history_bst:
                 records = json.load(f)
             for item in records:
                 new_node = history_node(
-                    item["timepoint"],
+                    item["time_point"],
                     item["image_path"],
                     item["text"],
                     item["text_len"]
