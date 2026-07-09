@@ -26,7 +26,7 @@ def read_image(file_path):
     if not is_supported_image(file_path):
         raise ValueError("图片格式不支持，请选择 jpg、jpeg、png、bmp 或 webp 图片")
 
-    # 兼容中文路径读取
+    # 兼容中文路径读取图片
     image_data = np.fromfile(file_path, dtype=np.uint8)
     image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
 
@@ -100,63 +100,212 @@ def get_image_info(file_path):
     }
 
 
-def is_clean_screenshot(gray, image=None):
+def analyze_image_type(image):
     """
-    判断图片是否更像“截图 / 网页 / 软件界面 / 地图 / 游戏界面”。
+    自动分析图片类型。
 
-    返回 True：
-        采用轻度预处理，尽量保留原图信息。
+    返回：
+        dark_ui:
+            深色游戏界面、深色软件界面、黑底截图
 
-    返回 False：
-        采用文档增强预处理，适合拍照纸张、手写笔记、试卷。
+        clean_screen:
+            普通网页截图、手机截图、地图、软件界面
+
+        document:
+            拍照试卷、纸质文档、手写笔记
     """
 
-    # 白色区域比例
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
     white_ratio = np.mean(gray > 235)
-
-    # 黑色区域比例
     dark_ratio = np.mean(gray < 50)
-
-    # 灰度标准差，反映整体明暗变化
+    gray_mean = np.mean(gray)
     gray_std = np.std(gray)
 
-    # 边缘密度
     edges = cv2.Canny(gray, 80, 160)
     edge_ratio = np.mean(edges > 0)
 
-    # 如果是彩色图，计算平均饱和度
-    saturation_mean = 0
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    saturation_mean = np.mean(hsv[:, :, 1])
 
-    if image is not None and len(image.shape) == 3:
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        saturation_mean = np.mean(hsv[:, :, 1])
+    print("图片特征分析：")
+    print(f"白色区域比例：{white_ratio:.3f}")
+    print(f"黑色区域比例：{dark_ratio:.3f}")
+    print(f"平均亮度：{gray_mean:.2f}")
+    print(f"亮度标准差：{gray_std:.2f}")
+    print(f"边缘比例：{edge_ratio:.3f}")
+    print(f"平均饱和度：{saturation_mean:.2f}")
 
-    # 情况 1：大量白底，通常是网页、截图、文档截图
-    if white_ratio > 0.45 and dark_ratio < 0.25:
-        return True
+    # 深色游戏界面 / 黑底 UI
+    if dark_ratio > 0.45:
+        return "dark_ui"
 
-    # 情况 2：图片本身很干净，明暗变化不剧烈
-    if white_ratio > 0.35 and gray_std < 70:
-        return True
+    if gray_mean < 85 and dark_ratio > 0.30:
+        return "dark_ui"
 
-    # 情况 3：彩色截图、地图、游戏界面一般饱和度较高
-    if saturation_mean > 35 and gray_std > 45:
-        return True
+    # 彩色界面、地图、游戏、软件 UI
+    if saturation_mean > 35 and gray_std > 40:
+        return "clean_screen"
 
-    # 情况 4：黑底或深色界面截图
-    if dark_ratio > 0.35 and gray_std > 50:
-        return True
+    # 大面积白底截图，例如网页、GitHub、搜索页面
+    if white_ratio > 0.45 and dark_ratio < 0.30:
+        return "clean_screen"
 
-    # 情况 5：边缘很多的复杂界面，不适合强行文档增强
-    if edge_ratio > 0.18 and gray_std > 55:
-        return True
+    # 边缘特别多的复杂界面，不适合文档增强
+    if edge_ratio > 0.16 and gray_std > 55:
+        return "clean_screen"
 
-    return False
+    # 其他情况默认按文档处理
+    return "document"
+
+
+def preprocess_dark_ui(image):
+    """
+    深色游戏界面 / 深色 UI 的预处理。
+
+    这类图片不能强行洗白，否则会变成黑白漫画效果。
+    这里输出灰度增强图，保证保存的是处理后的图片。
+    """
+
+    # 转灰度
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # 轻微去噪
+    denoised = cv2.bilateralFilter(gray, 3, 25, 25)
+
+    # 轻微锐化
+    blur = cv2.GaussianBlur(denoised, (3, 3), 0)
+
+    sharpened = cv2.addWeighted(
+        denoised,
+        1.25,
+        blur,
+        -0.25,
+        0
+    )
+
+    # 轻微增强对比度
+    final_image = cv2.convertScaleAbs(
+        sharpened,
+        alpha=1.10,
+        beta=0
+    )
+
+    return final_image
+
+
+def preprocess_clean_screen(image):
+    """
+    普通截图 / 网页 / 地图 / 软件界面的预处理。
+
+    这类图片本来比较清楚，所以只做灰度化、轻微去噪、轻微锐化。
+    """
+
+    # 转灰度，保证结果明显是处理后的图片
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # 轻微去噪
+    denoised = cv2.bilateralFilter(gray, 3, 25, 25)
+
+    # 轻微锐化
+    blur = cv2.GaussianBlur(denoised, (3, 3), 0)
+
+    sharpened = cv2.addWeighted(
+        denoised,
+        1.20,
+        blur,
+        -0.20,
+        0
+    )
+
+    # 轻微提亮
+    final_image = cv2.convertScaleAbs(
+        sharpened,
+        alpha=1.08,
+        beta=3
+    )
+
+    return final_image
+
+
+def preprocess_document(image):
+    """
+    拍照文档 / 试卷 / 手写笔记的预处理。
+
+    目标：
+    1. 减弱纸张阴影
+    2. 保留文字
+    3. 不要过度洗白
+    4. 适当加深文字
+    """
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # 轻微去噪，保护文字边缘
+    denoised = cv2.bilateralFilter(gray, 5, 35, 35)
+
+    # 背景估计
+    background = cv2.GaussianBlur(denoised, (61, 61), 0)
+
+    # 背景校正
+    corrected = cv2.divide(
+        denoised,
+        background,
+        scale=245
+    )
+
+    # 和原灰度图混合，避免处理过度
+    corrected = cv2.addWeighted(
+        corrected,
+        0.65,
+        gray,
+        0.35,
+        0
+    )
+
+    # 局部对比度增强
+    clahe = cv2.createCLAHE(
+        clipLimit=1.0,
+        tileGridSize=(12, 12)
+    )
+
+    enhanced = clahe.apply(corrected)
+
+    # 温和锐化
+    blur = cv2.GaussianBlur(enhanced, (3, 3), 0)
+
+    sharpened = cv2.addWeighted(
+        enhanced,
+        1.12,
+        blur,
+        -0.12,
+        0
+    )
+
+    final_image = sharpened.copy()
+
+    # 只加深较暗文字区域
+    text_mask = final_image < 145
+
+    final_image[text_mask] = np.clip(
+        final_image[text_mask] * 0.82,
+        0,
+        255
+    ).astype(np.uint8)
+
+    # 轻微提亮背景
+    final_image = cv2.convertScaleAbs(
+        final_image,
+        alpha=1.00,
+        beta=2
+    )
+
+    return final_image
 
 
 def import_and_preprocess_image(input_path, output_folder="processed_images", max_width=1600):
     """
-    图片导入与预处理总函数
+    图片导入与预处理总函数。
 
     功能：
     1. 检查图片路径是否存在
@@ -165,28 +314,19 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     4. 读取图片，兼容中文路径
     5. 调整图片大小
     6. 自动判断图片类型
-    7. 截图/网页/地图/游戏界面：轻度处理
-    8. 拍照文档/手写笔记/试卷：文档增强处理
-    9. 保存处理后的图片
-    10. 返回处理后的图片路径
-
-    参数：
-        input_path: 原始图片路径
-        output_folder: 处理后图片保存文件夹，默认 processed_images
-        max_width: 图片最大宽度，默认 1600
-
-    返回：
-        processed_image_path: 处理后的图片路径
+    7. 根据图片类型选择不同预处理方案
+    8. 保存处理后的图片
+    9. 返回处理后的图片路径
     """
 
-    # 1. 自动新建保存文件夹
+    # 1. 创建保存文件夹
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     # 2. 读取图片
     image = read_image(input_path)
 
-    # 3. 获取图片基本信息
+    # 3. 获取原图信息
     height, width = image.shape[:2]
 
     if len(image.shape) == 3:
@@ -200,7 +340,7 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     print(f"图片高度：{height}")
     print(f"图片通道数：{channels}")
 
-    # 4. 调整图片大小
+    # 4. 缩放图片
     image = resize_image(image, max_width=max_width)
 
     new_height, new_width = image.shape[:2]
@@ -210,112 +350,39 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     else:
         print("图片尺寸未超过限制，不需要缩放")
 
-    # 5. 转换为灰度图
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # 5. 自动判断图片类型
+    image_type = analyze_image_type(image)
 
-    # 6. 判断图片类型
-    clean_screenshot = is_clean_screenshot(gray, image)
+    print(f"检测结果：{image_type}")
 
-    if clean_screenshot:
-        print("检测结果：图片较干净，采用轻度预处理")
+    # 6. 根据类型选择不同预处理方案
+    if image_type == "dark_ui":
+        print("采用方案：深色界面灰度轻增强")
+        final_image = preprocess_dark_ui(image)
 
-        # =====================================================
-        # 模式一：轻度处理
-        # 适合：网页截图、软件界面、地图、游戏界面、手机截图
-        # =====================================================
-
-        # 轻微去噪
-        denoised = cv2.bilateralFilter(gray, 3, 30, 30)
-
-        # 轻微锐化
-        blur = cv2.GaussianBlur(denoised, (3, 3), 0)
-
-        sharpened = cv2.addWeighted(
-            denoised,
-            1.15,
-            blur,
-            -0.15,
-            0
-        )
-
-        # 轻微提亮背景
-        final_image = cv2.convertScaleAbs(
-            sharpened,
-            alpha=1.03,
-            beta=3
-        )
+    elif image_type == "clean_screen":
+        print("采用方案：截图灰度轻增强")
+        final_image = preprocess_clean_screen(image)
 
     else:
-        print("检测结果：图片背景较复杂，采用文档增强预处理")
+        print("采用方案：文档温和增强")
+        final_image = preprocess_document(image)
 
-        # =====================================================
-        # 模式二：文档增强处理
-        # 适合：拍照纸张、手写笔记、试卷、背景有阴影的图片
-        # =====================================================
+    # 7. 生成文件名
+    timestamp = int(time.time() * 1000)
 
-        # 轻微去噪，保留文字边缘
-        denoised = cv2.bilateralFilter(gray, 5, 45, 45)
+    file_name = f"preprocessed_{image_type}_{timestamp}.png"
 
-        # 背景光照校正
-        # 用大范围模糊估计背景，减少纸张阴影和底纹
-        background = cv2.GaussianBlur(denoised, (41, 41), 0)
-
-        corrected = cv2.divide(
-            denoised,
-            background,
-            scale=255
-        )
-
-        # 局部对比度增强
-        # clipLimit 不宜太大，否则容易把背景噪点放大
-        clahe = cv2.createCLAHE(
-            clipLimit=1.2,
-            tileGridSize=(8, 8)
-        )
-
-        enhanced = clahe.apply(corrected)
-
-        # 轻微锐化，让文字边缘更清楚
-        blur = cv2.GaussianBlur(enhanced, (3, 3), 0)
-
-        sharpened = cv2.addWeighted(
-            enhanced,
-            1.25,
-            blur,
-            -0.25,
-            0
-        )
-
-        # 只加深真正偏暗的文字区域
-        final_image = sharpened.copy()
-
-        # 灰度值越小越黑
-        # 小于 165 的区域一般是文字或线条
-        text_mask = final_image < 165
-
-        final_image[text_mask] = np.clip(
-            final_image[text_mask] * 0.75,
-            0,
-            255
-        ).astype(np.uint8)
-
-        # 轻微提亮背景，防止底纹过重
-        final_image = cv2.convertScaleAbs(
-            final_image,
-            alpha=1.02,
-            beta=4
-        )
-
-    # 7. 生成处理后图片文件名
-    file_name = f"preprocessed_{int(time.time())}.png"
-
-    # 8. 拼接保存路径
     processed_image_path = os.path.join(output_folder, file_name)
 
-    # 9. 保存图片
+    print("即将保存的处理后图片信息：")
+    print(f"处理后图片尺寸：{final_image.shape}")
+    print(f"处理后图片类型：{final_image.dtype}")
+
+    # 8. 保存处理后的图片
     save_image(processed_image_path, final_image)
 
-    # 10. 转成绝对路径，方便 OCR 模块调用
+    # 9. 转成绝对路径，方便其他模块调用
     processed_image_path = os.path.abspath(processed_image_path)
 
     print("图片预处理完成")
@@ -326,10 +393,10 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
 
 def preprocess_image(input_path, output_dir="processed_images"):
     """
-    兼容旧代码的函数名。
+    兼容旧代码。
 
     如果之前别的文件调用的是 preprocess_image，
-    这里会自动转到 import_and_preprocess_image。
+    这里会自动调用 import_and_preprocess_image。
     """
 
     return import_and_preprocess_image(
@@ -340,7 +407,7 @@ def preprocess_image(input_path, output_dir="processed_images"):
 
 if __name__ == "__main__":
     """
-    单独运行 processed.py 时，用来测试图片预处理效果。
+    单独运行 processed.py 时，用于测试。
     """
 
     test_path = input("请输入图片路径：").strip()
