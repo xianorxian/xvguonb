@@ -93,7 +93,7 @@ class history_bst:
         return res
 
     def save_to_file(self):
-        records = self.get_all_history()
+        records = self.get_history()
         with open(self.save_path, "w", encoding="utf-8") as f:
             json.dump(records, f, ensure_ascii=False, indent=2)
 
@@ -105,15 +105,15 @@ class history_bst:
                 records = json.load(f)
             for item in records:
                 new_node = history_node(
-                    item["timestamp"],
-                    item["img_path"],
-                    item["ocr_text"],
+                    item["timepoint"],
+                    item["image_path"],
+                    item["text"],
                     item["text_len"]
                 )
                 if self.root is None:
                     self.root = new_node
                 else:
-                    self._insert(self.root, new_node)
+                    self.my_insert(self.root, new_node)
         except Exception:
             self.root = None
 
