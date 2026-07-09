@@ -1,0 +1,122 @@
+import time,json,os
+
+class history_node:
+    def __init__(self,timepoint,image_path,text,text_len):
+        self.time_point = timepoint
+        self.image_path = image_path
+        self.text = text
+        self.text_len = text_len
+        self.left = None
+        self.right = None
+class history_bst:
+    def __init__(self):
+        self.root = None
+        self.save_path = "history.json"
+        self.load_from_file()
+
+    def my_insert(self,node,new_node):
+        if new_node.timepoint < node.timepoint:
+            if node.left == None :
+                node.left = new_node
+            else:
+                self.my_insert(node.left,new_node)
+        else:
+            if node.right == None:
+                node.right = new_node
+            else:
+                self.my_insert(node.right,new_node)
+                
+    def add_history(self,image_path,text):
+        tp = time.time()
+        text_len = len(text.strip())
+        new_node = history_node(tp,image_path,text,text_len)
+        if self.root == None:
+            self.root =new_node
+        else:
+            self.my_insert(self.root,new_node)
+
+    def inorder(self,node,res_list):
+        if node == None:
+            return
+        self.inorder(node.left,res_list)
+        res_list.append({
+            "timepoint":node.timepoint,
+            "image_path":node.image_path,
+            "text":node.text,
+            "text_len":node.text_len
+        })
+        self.inorder(node.right,res_list)
+
+    def get_history(self):
+        res=[]
+        self.inorder(self.root,res)
+        return res
+
+    def search(self,node,start,end,res_list):
+        if node == None:
+            return
+        if start <= node.timepoint <= end:
+            res_list.append({
+                "timepoint": node.timepoint,
+                "image_path": node.image_path,
+                "text":node.text,
+                "text_len":node.text_len
+            })
+            self.search(node.left,start,end,res_list)
+            self.search(node.right,start,end,res_list)
+        elif node.timepoint > end:
+            self.search(node.left,start,end,res_list)
+        else:
+            self.search(node.right,start,end,res_list)
+    
+    def search_by_time_range(self, start_tp,end_tp):
+        res = []
+        self.search(self.root,start_tp,end_tp,res)
+        return res
+
+    def search_keyword(self, node, keyword, res_list):
+        if node == None:
+            return
+        lower_text = node.text.lower()
+        lower_key = keyword.lower()
+        if lower_key in lower_text:
+            res_list.append({
+                "timepoint": node.timepoint,
+                "image_path": node.image_path,
+                "text": node.text,
+                "text_len": node.text_len
+            })
+        self.search_keyword(node.left, keyword, res_list)
+        self.search_keyword(node.right, keyword, res_list)
+
+    def search_by_keyword(self, keyword):
+        res = []
+        self.search_keyword(self.root, keyword, res)
+        return res
+
+    def save_to_file(self):
+        records = self.get_all_history()
+        with open(self.save_path, 'w', encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
+
+    def load_from_file(self):
+        if not os.path.exists(self.save_path):
+            return
+        try:
+            with open(self.save_path, 'r', encoding="utf-8") as f:
+                records = json.load(f)
+            for item in records:
+                new_node = history_node(
+                    item["timepoint"],
+                    item["image_path"],
+                    item["text"],
+                    item["text_len"]
+                )
+                if self.root is None:
+                    self.root = new_node
+                else:
+                    self.my_insert(self.root, new_node)
+        except Exception:
+            self.root = None
+
+history_tree = history_bst()
