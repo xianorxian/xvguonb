@@ -37,6 +37,7 @@ class history_bst:
             self.root = new_node
         else:
             self.my_insert(self.root, new_node)
+        self.save_to_file()
 
     def inorder(self, node, res_list):
         if node == None:
@@ -99,8 +100,12 @@ class history_bst:
 
     def save_to_file(self):
         records = self.get_history()
-        with open(self.save_path, 'w', encoding="utf-8") as f:
-            json.dump(records, f, ensure_ascii=False, indent=2)
+        try:
+            with open(self.save_path, 'w', encoding="utf-8") as f:
+                json.dump(records, f, ensure_ascii=False, indent=2)
+            print("历史记录已经写入")
+        except Exception as err:
+            print("保存失败，原因：", err)
 
     def load_from_file(self):
         if not os.path.exists(self.save_path):
@@ -108,6 +113,7 @@ class history_bst:
         try:
             with open(self.save_path, 'r', encoding="utf-8") as f:
                 records = json.load(f)
+            self.root = None
             for item in records:
                 new_node = history_node(
                     item["time_point"],
@@ -119,7 +125,9 @@ class history_bst:
                     self.root = new_node
                 else:
                     self.my_insert(self.root, new_node)
-        except Exception:
+            print(f"成功读取{len(records)}条历史记录")
+        except Exception as err:
+            print("读取历史文件失败：", err)
             self.root = None
 
 
