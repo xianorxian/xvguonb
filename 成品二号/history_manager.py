@@ -130,5 +130,28 @@ class history_bst:
             print("读取历史文件失败：", err)
             self.root = None
 
+    def search_single_by_tp(self, node, target_tp, res):
+        if node is None:
+            return
+        if node.time_point == target_tp:
+            res.append({
+                "time_point": node.time_point,
+                "image_path": node.image_path,
+                "text": node.text,
+                "text_len": node.text_len
+            })
+            return
+        if target_tp < node.time_point:
+            self.search_single_by_tp(node.left, target_tp, res)
+        else:
+            self.search_single_by_tp(node.right, target_tp, res)
+
+    def get_record_by_tp(self, target_tp):
+        res_list = []
+        self.search_single_by_tp(self.root, target_tp, res_list)
+        if len(res_list) > 0:
+            return res_list[0]
+        return None
+
 
 history_tree = history_bst()
