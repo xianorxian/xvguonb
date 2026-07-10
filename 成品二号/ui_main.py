@@ -843,14 +843,34 @@ class OCRApp(CTkDnD):
         self.status_var.set("状态：识别结果已清空")
 
     def show_history_window(self):
+
         if self.history_win is not None and self.history_win.winfo_exists():
             self.history_win.lift()
             self.history_win.focus_force()
+
+            # 短暂置顶，防止被主窗口挡住
+            self.history_win.attributes("-topmost", True)
+            self.history_win.after(
+                200,
+                lambda: self.history_win.attributes("-topmost", False)
+            )
             return
 
         def on_close():
             self.history_win = None
 
         self.history_win = HistoryWindow(self, on_close_callback=on_close)
+
+        # 设置为主窗口的子窗口
+        self.history_win.transient(self)
+
+        # 显示在主界面前面
         self.history_win.lift()
         self.history_win.focus_force()
+
+        # 短暂置顶后取消置顶
+        self.history_win.attributes("-topmost", True)
+        self.history_win.after(
+            200,
+            lambda: self.history_win.attributes("-topmost", False)
+        )
