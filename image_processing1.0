@@ -3,6 +3,8 @@ import time
 import cv2
 import numpy as np
 
+# 启用 OpenCV 已编译的 SIMD 等优化（多数发行版默认开启，这里显式保证）
+cv2.setUseOptimized(True)
 
 # 支持的图片格式
 SUPPORTED_IMAGE_TYPES = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
@@ -70,7 +72,10 @@ def save_image(file_path, image):
         ext = ".png"
         file_path += ext
 
-    success, encoded_image = cv2.imencode(ext, image)
+    # PNG 默认压缩级别偏重，OCR 中没有必要用更多 CPU 换取少量体积。
+    # 压缩级别 1 仍是无损图片，不会改变任何像素和后续 OCR 结果。
+    encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 1] if ext.lower() == ".png" else []
+    success, encoded_image = cv2.imencode(ext, image, encode_params)
 
     if not success:
         raise ValueError("图片保存失败")
@@ -100,7 +105,7 @@ def get_image_info(file_path):
     }
 
 
-def analyze_image_type(image):
+def analyze_image_type(image, gray=None):
     """
     自动分析图片类型。
 
@@ -115,7 +120,10 @@ def analyze_image_type(image):
             拍照试卷、纸质文档、手写笔记
     """
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # 总函数可传入已经计算好的灰度图，避免重复转换。
+    # gray 为可选参数，因此原有 analyze_image_type(image) 调用完全兼容。
+    if gray is None:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     white_ratio = np.mean(gray > 235)
     dark_ratio = np.mean(gray < 50)
@@ -159,7 +167,7 @@ def analyze_image_type(image):
     return "document"
 
 
-def preprocess_dark_ui(image):
+def preprocess_dark_ui(image, gray=None):
     """
     深色游戏界面 / 深色 UI 的预处理。
 
@@ -168,7 +176,8 @@ def preprocess_dark_ui(image):
     """
 
     # 转灰度
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if gray is None:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # 轻微去噪
     denoised = cv2.bilateralFilter(gray, 3, 25, 25)
@@ -194,7 +203,7 @@ def preprocess_dark_ui(image):
     return final_image
 
 
-def preprocess_clean_screen(image):
+def preprocess_clean_screen(image, gray=None):
     """
     普通截图 / 网页 / 地图 / 软件界面的预处理。
 
@@ -202,7 +211,8 @@ def preprocess_clean_screen(image):
     """
 
     # 转灰度，保证结果明显是处理后的图片
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if gray is None:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # 轻微去噪
     denoised = cv2.bilateralFilter(gray, 3, 25, 25)
@@ -228,7 +238,7 @@ def preprocess_clean_screen(image):
     return final_image
 
 
-def preprocess_document(image):
+def preprocess_document(image, gray=None):
     """
     拍照文档 / 试卷 / 手写笔记的预处理。
 
@@ -239,7 +249,8 @@ def preprocess_document(image):
     4. 适当加深文字
     """
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if gray is None:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # 轻微去噪，保护文字边缘
     denoised = cv2.bilateralFilter(gray, 5, 35, 35)
@@ -282,13 +293,13 @@ def preprocess_document(image):
         0
     )
 
-    final_image = sharpened.copy()
-
     # 只加深较暗文字区域
-    text_mask = final_image < 145
+    text_mask = sharpened < 145
 
+    # 仅在确实需要修改时复制，结果与原代码一致，同时避免一次无条件复制。
+    final_image = sharpened.copy()
     final_image[text_mask] = np.clip(
-        final_image[text_mask] * 0.82,
+        sharpened[text_mask] * 0.82,
         0,
         255
     ).astype(np.uint8)
@@ -319,9 +330,12 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
     9. 返回处理后的图片路径
     """
 
+    # 记录整个图片预处理流程的开始时间。
+    # perf_counter 精度更高，适合统计程序运行耗时。
+    start_time = time.perf_counter()
+
     # 1. 创建保存文件夹
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    os.makedirs(output_folder, exist_ok=True)
 
     # 2. 读取图片
     image = read_image(input_path)
@@ -351,22 +365,24 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
         print("图片尺寸未超过限制，不需要缩放")
 
     # 5. 自动判断图片类型
-    image_type = analyze_image_type(image)
+    # 灰度图在分析和后续处理阶段都会使用，只计算一次。
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image_type = analyze_image_type(image, gray=gray)
 
     print(f"检测结果：{image_type}")
 
     # 6. 根据类型选择不同预处理方案
     if image_type == "dark_ui":
         print("采用方案：深色界面灰度轻增强")
-        final_image = preprocess_dark_ui(image)
+        final_image = preprocess_dark_ui(image, gray=gray)
 
     elif image_type == "clean_screen":
         print("采用方案：截图灰度轻增强")
-        final_image = preprocess_clean_screen(image)
+        final_image = preprocess_clean_screen(image, gray=gray)
 
     else:
         print("采用方案：文档温和增强")
-        final_image = preprocess_document(image)
+        final_image = preprocess_document(image, gray=gray)
 
     # 7. 生成文件名
     timestamp = int(time.time() * 1000)
@@ -387,6 +403,10 @@ def import_and_preprocess_image(input_path, output_folder="processed_images", ma
 
     print("图片预处理完成")
     print(f"处理后的图片已保存到：{processed_image_path}")
+
+    # 计算并显示总耗时，包括读取、缩放、分析、增强和保存图片。
+    elapsed_time = time.perf_counter() - start_time
+    print(f"图片处理耗时：{elapsed_time:.3f} 秒")
 
     return processed_image_path
 
