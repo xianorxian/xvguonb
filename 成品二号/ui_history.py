@@ -85,6 +85,19 @@ class HistoryWindow(ctk.CTkToplevel):
         self.table_frame.grid_rowconfigure(0, weight=1)
         self.table_frame.grid_columnconfigure(0, weight=1)
 
+        style = ttk.Style()
+
+        style.configure(
+            "Treeview",
+            font=("微软雅黑", 16),
+            rowheight=40
+        )
+
+        style.configure(
+            "Treeview.Heading",
+            font=("微软雅黑", 16, "bold")
+        )
+
         self.tree = ttk.Treeview(
             self.table_frame,
             columns=("时间", "文字数", "内容"),
@@ -96,7 +109,7 @@ class HistoryWindow(ctk.CTkToplevel):
         self.tree.heading("文字数", text="文字数")
         self.tree.heading("内容", text="文本摘要")
 
-        self.tree.column("时间", width=190, anchor="center")
+        self.tree.column("时间", width=190 ,anchor="center")
         self.tree.column("文字数", width=100, anchor="center")
         self.tree.column("内容", width=470, anchor="w")
 
